@@ -1,12 +1,12 @@
 name: Daily Report Json
 
 on:
-  workflow_dispatch:   # ✅ кнопка ручного запуска
+  workflow_dispatch:   # ✅ ручной запуск
   push:
     branches:
       - main
   schedule:
-    - cron: '0 7,10,13,16,19 * * *'
+    - cron: '0 7,10,13,16,19 * * *'   # запуск по расписанию
 
 jobs:
   generate-report:
@@ -14,14 +14,17 @@ jobs:
     timeout-minutes: 10
 
     steps:
+      # 1️⃣ Клонирование кода
       - name: Checkout code
         uses: actions/checkout@v4
 
+      # 2️⃣ Настройка Python
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
           python-version: '3.9'
 
+      # 3️⃣ Установка зависимостей
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
@@ -32,11 +35,13 @@ jobs:
             prettytable==3.8.0 \
             python-dateutil==2.8.2
 
+      # 4️⃣ Создание папки и пустого JSON
       - name: Create data directory
         run: |
           mkdir -p data
           touch data/weather_data.json
 
+      # 5️⃣ Запуск основного скрипта
       - name: Run full report
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
@@ -46,19 +51,22 @@ jobs:
         run: |
           python main.py --mode FULL_REPORT --use-live
 
+      # 6️⃣ Проверка результата
       - name: Show JSON content
         run: cat data/weather_data.json
 
+      # 7️⃣ Публикация в GitHub Pages
       - name: Publish JSON to GitHub Pages
         uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GH_PAT_DAILY_REPORT_JSON }}
           publish_dir: ./data
           publish_branch: gh-pages
-          destination_dir: ""
-          user_name: "github-actions"
-          user_email: "github-actions@users.noreply.github.com"
+          # 👉 Эти два можно не указывать, но оставим для наглядности
+          user_name: github-actions
+          user_email: github-actions@users.noreply.github.com
 
+      # 8️⃣ Артефакты при ошибке
       - name: Upload logs on failure
         if: failure()
         uses: actions/upload-artifact@v4
