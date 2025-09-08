@@ -7,7 +7,10 @@ on:
       - main
   schedule:
     - cron: '0 7,10,13,16,19 * * *'   # запуск по расписанию
-
+    
+permissions:
+  contents: write   # ⬅️ даём право на пуш в репозиторий
+  
 jobs:
   generate-report:
     runs-on: ubuntu-latest
