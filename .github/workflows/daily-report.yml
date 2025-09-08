@@ -62,7 +62,7 @@ jobs:
           github_token: ${{ secrets.GH_PAT_DAILY_REPORT_JSON }}
           publish_dir: ./data
           publish_branch: gh-pages
-          # 👉 Эти два можно не указывать, но оставим для наглядности
+          force_orphan: true   # 🔑 гарантирует чистую Pages-ветку
           user_name: github-actions
           user_email: github-actions@users.noreply.github.com
 
