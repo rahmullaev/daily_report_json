@@ -59,12 +59,13 @@ jobs:
       - name: Publish JSON to GitHub Pages
         uses: peaceiris/actions-gh-pages@v4
         with:
-          github_token: ${{ secrets.GH_PAT_DAILY_REPORT_JSON }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}   # ⬅️ встроенный токен
           publish_dir: ./data
           publish_branch: gh-pages
-          force_orphan: true   # 🔑 гарантирует чистую Pages-ветку
+          force_orphan: true
           user_name: github-actions
           user_email: github-actions@users.noreply.github.com
+
 
       # 8️⃣ Артефакты при ошибке
       - name: Upload logs on failure
