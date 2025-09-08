@@ -1,0 +1,69 @@
+name: Daily Report Json
+
+on:
+  workflow_dispatch:   # ✅ кнопка ручного запуска
+  push:
+    branches:
+      - main
+  schedule:
+    - cron: '0 7,10,13,16,19 * * *'
+
+jobs:
+  generate-report:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install \
+            requests==2.31.0 \
+            pillow==10.0.0 \
+            "python-telegram-bot==13.7" \
+            prettytable==3.8.0 \
+            python-dateutil==2.8.2
+
+      - name: Create data directory
+        run: |
+          mkdir -p data
+          touch data/weather_data.json
+
+      - name: Run full report
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_USER_IDS: ${{ secrets.TELEGRAM_USER_IDS }}
+          OW_API_KEY: ${{ secrets.OW_API_KEY }}
+          CITY_ID: ${{ secrets.CITY_ID }}
+        run: |
+          python main.py --mode FULL_REPORT --use-live
+
+      - name: Show JSON content
+        run: cat data/weather_data.json
+
+      - name: Publish JSON to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GH_PAT_DAILY_REPORT_JSON }}
+          publish_dir: ./data
+          publish_branch: gh-pages
+          destination_dir: ""
+          user_name: "github-actions"
+          user_email: "github-actions@users.noreply.github.com"
+
+      - name: Upload logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: error-logs
+          path: |
+            Log.log
+            data/weather_data.json
