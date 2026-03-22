@@ -7,12 +7,14 @@ from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
 from collections import defaultdict
 from zoneinfo import ZoneInfo
-from PIL import Image, ImageDraw, ImageFont  # ← Здесь используется Pillow
-from telegram import Bot, ParseMode, InputMediaPhoto  # ParseMode здесь!
+from PIL import Image, ImageDraw, ImageFont
+from telegram import Bot, InputMediaPhoto, ParseMode
 from telegram.error import TelegramError
 from prettytable import PrettyTable
 import re
 
+# Binance client
+from binance.client import Client
 
 # ───────── НАСТРОЙКИ ─────────
 USE_LIVE = True
@@ -33,7 +35,7 @@ WIDTH = 500
 ICON_SIZE = 32
 
 # Telegram
-USER_IDS = [int(uid) for uid in os.getenv("TELEGRAM_USER_IDS", "883019358").split(",")]
+USER_IDS = [int(uid) for uid in os.getenv("TELEGRAM_USER_IDS", "883019358").split(",") if uid]
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
 
 # Kaspi курсы
@@ -59,9 +61,14 @@ BASE_HEADERS = {
     "gSystem": "kkz",
 }
 
+#JSON url
+ENABLE_ALERTS = True
+GITHUB_JSON_URL = "https://rahmullaev.github.io/daily_report_json/weather_data.json"
+
+
 # Инициализация бота Telegram
 try:
-    bot = Bot(token=TELEGRAM_BOT_TOKEN)
+    bot = Bot(token=TELEGRAM_BOT_TOKEN) if TELEGRAM_BOT_TOKEN else None
 except Exception as e:
     print(f"Ошибка инициализации бота: {e}")
     bot = None
@@ -82,21 +89,13 @@ def setup_logging():
 log = setup_logging()
 
 
+# =============================================================================================
 
-def send_error_to_telegram(error_msg: str):
-    """Отправка ошибок в Telegram"""
-    try:
-        log.error(error_msg)
-        tg_msg(f"🚨 Ошибка в скрипте:\n{error_msg}")
-    except Exception as e:
-        log.error(f"Ошибка при отправке ошибки в Telegram: {e}")
-
-# ─── ОСНОВНЫЕ ФУНКЦИИ ────────────────────────────────────────────────────────
 def should_run(hour: int, update_only: bool) -> bool:
     """Проверяет можно ли выполнять запросы в текущее время"""
     if not update_only:
         return True
-    return 5 <= hour <= 15
+    return 0 <= hour <= 15
 
 def get_weather(use_live: bool = USE_LIVE) -> Optional[Dict[str, Any]]:
     """Получение данных о погоде"""
@@ -144,12 +143,13 @@ def get_weather(use_live: bool = USE_LIVE) -> Optional[Dict[str, Any]]:
         save_data(store)
         return new_data
     except Exception as e:
-        error_msg = f"Ошибка получения погоды: {e}"
-        send_error_to_telegram(error_msg)
+        log.error(f"Ошибка получения погоды: {e}")
         return None
 
-def get_namaz(use_live: bool = USE_LIVE) -> Dict[str, str]:
-    """Получение времени намазов с Mawaqit"""
+
+
+def get_namaz(use_live: bool = True) -> Dict[str, str]:
+    """Получение времени намазов через Aladhan API (Метц, Франция)"""
     if not use_live:
         data = load_data().get("namaz", {})
         if data:
@@ -158,50 +158,26 @@ def get_namaz(use_live: bool = USE_LIVE) -> Dict[str, str]:
         return {}
 
     try:
-        url = "https://mawaqit.net/ru/grande-mosquee-de-metz-metz"
-        r = requests.get(url, timeout=10)
-        html = r.text
+        params = {
+            "latitude": 49.1193,
+            "longitude": 6.1757,
+            "method": 3  # ISNA (приближено к MuslimPro)
+        }
+        r = requests.get("https://api.aladhan.com/v1/timings", params=params, timeout=10)
+        r.raise_for_status()
+        data = r.json()
+        timings = data.get("data", {}).get("timings", {})
 
-        match = re.search(r'var\s+confData\s*=\s*({.*?});', html, re.DOTALL)
-        if not match:
-            raise Exception("Не удалось найти confData на странице Mawaqit")
+        namaz_mapping = {
+            "Fajr": "Фаджр",
+            "Sunrise": "Восход",
+            "Dhuhr": "Зухр",
+            "Asr": "Аср",
+            "Maghrib": "Магриб",
+            "Isha": "Иша"
+        }
 
-        data_json = json.loads(match.group(1))
-        times = data_json.get("times", {})
-        namaz_times = {}
-
-        if isinstance(times, dict):
-            # Сопоставление с русскими названиями как в оригинале
-            namaz_mapping = {
-                "fajr": "Фаджр",
-                "shuruq": "Восход", 
-                "dhuhr": "Зухр",
-                "asr": "Аср",
-                "maghrib": "Магриб",
-                "isha": "Иша"
-            }
-            
-            for eng_name, rus_name in namaz_mapping.items():
-                if eng_name in times:
-                    namaz_times[rus_name] = times[eng_name]
-                    
-        elif isinstance(times, list) and len(times) >= 5:
-            # Для формата списка
-            namaz_times = {
-                "Фаджр": times[0],
-                "Зухр": times[1],
-                "Аср": times[2],
-                "Магриб": times[3],
-                "Иша": times[4],
-                "Восход": data_json.get("shuruq", "")
-            }
-
-        # Убедимся, что все обязательные поля есть
-        required_names = ["Фаджр", "Восход", "Зухр", "Аср", "Магриб", "Иша"]
-        for name in required_names:
-            if name not in namaz_times:
-                namaz_times[name] = ""
-
+        namaz_times = {rus: timings.get(eng, "") for eng, rus in namaz_mapping.items()}
         result = {
             **namaz_times,
             "last_upd_namaz": datetime.now(PARIS).strftime("%d.%m.%Y %H:%M:%S")
@@ -210,15 +186,19 @@ def get_namaz(use_live: bool = USE_LIVE) -> Dict[str, str]:
         store = load_data()
         store["namaz"] = result
         save_data(store)
+
+        log.info("Время намазов успешно обновлено с Aladhan API.")
         return result
-        
+
     except Exception as e:
-        error_msg = f"Ошибка получения намазов с Mawaqit: {e}"
-        send_error_to_telegram(error_msg)
+        log.error(f"Ошибка получения намазов: {e}")
         return {}
 
+
+
+
 def get_rates(force_update: bool = False, use_live: bool = USE_LIVE) -> Dict[str, Dict[str, str]]:
-    """Получение курсов валют"""
+    """Получение курсов валют (БЕЗ сохранения)"""
     if not use_live:
         data = load_data().get("currency_rates", {})
         if data:
@@ -228,164 +208,176 @@ def get_rates(force_update: bool = False, use_live: bool = USE_LIVE) -> Dict[str
 
     try:
         hdrs = {**BASE_HEADERS, "User-Agent": "Mozilla/5.0"}
-        payload = {"use_type": "32", "currency_codes": list(CURRENCIES), "rate_types": ["SALE", "BUY"]}
-        body = requests.post(KASPI_URL, headers=hdrs, json=payload, timeout=TIMEOUT_API).json()["body"]
-        
-        res = {it["currency"]: {"buy": it["buy"], "sale": it["sale"]} for it in body if it["currency"] in CURRENCIES}
-        res["last_upd_currency"] = datetime.now(PARIS).strftime("%d.%m.%Y %H:%M:%S")
-        
-        store = load_data()
-        store["currency_rates"] = res
-        save_data(store)
-        
-        return res
-    except Exception as e:
-        error_msg = f"Ошибка получения курсов: {e}"
-        log.error(error_msg)
-        return {}
-
-def process_currency_history(rates: Dict[str, Dict[str, str]]) -> Dict[str, List[Dict[str, float]]]:
-    """Обработка истории курсов с табличным выводом через prettytable"""
-    try:
-        if not rates or MONITOR_CURRENCY not in rates:
-            return {}
-
-        data = load_data()
-        now = datetime.now(PARIS)
-        current_date = now.strftime("%d.%m.%Y")
-        full_datetime = now.strftime("%d.%m.%Y %H:%M:%S")
-
-        if "currency_history" not in data:
-            data["currency_history"] = {}
-
-        if "last_history_update" not in data or data["last_history_update"] != current_date:
-            data["currency_history"] = {MONITOR_CURRENCY: []}
-            data["last_history_update"] = current_date
-            log.info(f"История курсов сброшена для нового дня {current_date}")
-
-        current_buy = float(rates[MONITOR_CURRENCY]["buy"])
-        current_sale = float(rates[MONITOR_CURRENCY]["sale"])
-        history = data["currency_history"].get(MONITOR_CURRENCY, [])
-
-        # Проверяем, есть ли предыдущая запись
-        if history:
-            last_entry = history[-1]
-            # Если курсы не изменились - пропускаем запись
-            if (last_entry.get("buy") == current_buy and 
-                last_entry.get("sale") == current_sale):
-                log.debug("Курсы не изменились, пропускаем запись")
-                return data["currency_history"]
-
-        # Создаем новую запись
-        new_entry = {
-            "t": full_datetime,
-            "buy": current_buy,
-            "sale": current_sale
+        payload = {
+            "use_type": "32",
+            "currency_codes": list(CURRENCIES),
+            "rate_types": ["SALE", "BUY"]
         }
 
-        # Если есть предыдущие данные - формируем таблицу изменений
-        if history:
-            prev = history[-1]
-            prev_buy = prev.get("buy", current_buy)
-            prev_sale = prev.get("sale", current_sale)
-            
-            # Создаем таблицу
-            table = PrettyTable()
-            table.field_names = ["Операция", "Предыдущий", "Текущий", "Изменение"]
-            table.align = "r"
-            table.align["Операция"] = "l"
-            table.header = True
-            
-            # Добавляем строки с эмодзи
-            buy_change = current_buy - prev_buy
-            buy_emoji = "📈" if buy_change > 0 else "📉" if buy_change < 0 else "➖"
-            table.add_row([
-                f"Покупка {buy_emoji}",
-                f"{prev_buy:.2f}", 
-                f"{current_buy:.2f}",
-                f"{'+' if buy_change > 0 else ''}{buy_change:.2f}"
-            ])
-            
-            sale_change = current_sale - prev_sale
-            sale_emoji = "📈" if sale_change > 0 else "📉" if sale_change < 0 else "➖"
-            table.add_row([
-                f"Продажа {sale_emoji}",
-                f"{prev_sale:.2f}",
-                f"{current_sale:.2f}",
-                f"{'+' if sale_change > 0 else ''}{sale_change:.2f}"
-            ])
-            
-            # Формируем сообщение
-            message = (
-                f"<b>🔔 Изменение курса {MONITOR_CURRENCY}</b>\n"
-                f"<pre>{table}</pre>\n"
-                f"🕒 {now.strftime('%d.%m.%Y %H:%M:%S')}"
-            )
-            
-            # Отправляем сообщение
-            tg_msg(message, parse_mode=ParseMode.HTML)
-            log.info(f"Обновление курса:\n{table}")
+        body = requests.post(
+            KASPI_URL,
+            headers=hdrs,
+            json=payload,
+            timeout=TIMEOUT_API
+        ).json()["body"]
 
-        # Добавляем новую запись в историю
-        history.append(new_entry)
-        data["currency_history"][MONITOR_CURRENCY] = history[-24:]  # Сохраняем только последние 24 записи
-        save_data(data)
+        res = {
+            it["currency"]: {
+                "buy": it["buy"],
+                "sale": it["sale"]
+            }
+            for it in body if it["currency"] in CURRENCIES
+        }
 
-        return data["currency_history"]
+        res["last_upd_currency"] = datetime.now(PARIS).strftime("%d.%m.%Y %H:%M:%S")
+
+        return res
 
     except Exception as e:
-        error_msg = f"Ошибка обработки истории: {e}"
-        send_error_to_telegram(error_msg)
-        log.error(error_msg, exc_info=True)
+        log.error(f"Ошибка получения курсов: {e}")
         return {}
 
-def tg_msg(txt: str, parse_mode: str = None, additional_ids: list = None):
-    """Отправка сообщений в Telegram"""
+
+
+def load_remote_json() -> dict:
+    """Загружаем данные с GitHub, возвращаем пустой словарь при ошибке"""
     try:
-        if not bot:
-            log.error("Бот Telegram не инициализирован")
-            return 0
-            
-        recipients = USER_IDS.copy()
-        if additional_ids:
-            recipients.extend(additional_ids)
-            
-        if not recipients:
-            log.error("Список получателей пуст")
-            return 0
-            
-        max_attempts = 3
-        success_count = 0
-        
-        for user_id in recipients:
-            for attempt in range(max_attempts):
-                try:
-                    bot.send_message(
-                        chat_id=user_id,
-                        text=txt,
-                        parse_mode=parse_mode,
-                        timeout=15
-                    )
-                    success_count += 1
-                    break
-                except TelegramError as e:
-                    if attempt == max_attempts - 1:
-                        log.error(f"Ошибка отправки пользователю {user_id} после {max_attempts} попыток: {e}")
-                    else:
-                        time.sleep(2)
-                except Exception as e:
-                    log.error(f"Неожиданная ошибка при отправке пользователю {user_id}: {e}")
-                    break
-        
-        log.info(f"Сообщение отправлено {success_count} из {len(recipients)} пользователей")
-        return success_count
-        
+        r = requests.get(GITHUB_JSON_URL, timeout=10)
+        r.raise_for_status()
+        data = r.json()
+        log.info(f"Данные с GitHub загружены успешно")
+        return data
+    except requests.exceptions.Timeout:
+        log.warning(f"Таймаут при загрузке GitHub JSON")
+        return {}
+    except requests.exceptions.ConnectionError:
+        log.warning(f"Ошибка подключения к GitHub")
+        return {}
     except Exception as e:
-        log.error(f"Критическая ошибка в функции tg_msg: {e}")
-        return 0
+        log.warning(f"Не удалось загрузить GitHub JSON: {e}")
+        return {}
+
+
+def get_previous_currency() -> dict:
+    """
+    Берем старые курсы ТОЛЬКО с GitHub JSON.
+    Если GitHub недоступен, возвращаем пустой словарь (алерты не отправляем).
+    """
+    try:
+        remote = load_remote_json()
+        if remote and remote.get("currency_rates"):
+            log.info("Старые курсы загружены с GitHub")
+            return remote["currency_rates"]
+        else:
+            log.warning("GitHub JSON не содержит currency_rates, алерты не будут отправлены")
+            return {}
+    except Exception as e:
+        log.error(f"Ошибка получения старых курсов с GitHub: {e}")
+        log.warning("GitHub недоступен, алерты не будут отправлены")
+        return {}
+
+
+def check_currency_changes(new_rates: dict, old_rates: dict) -> dict:
+    """Проверка изменений с защитами"""
+    
+    # ❗ защита от первого запуска (нет старых данных)
+    if not old_rates:
+        log.info("Нет старых данных с GitHub — алерты не отправляем (первый запуск или GitHub недоступен)")
+        return {}
+
+    alerts = {}
+    THRESHOLD = 0.1  # минимальное изменение
+
+    for cur in CURRENCIES:
+        new_data = new_rates.get(cur, {})
+        old_data = old_rates.get(cur, {})
+
+        # Проверяем, что валюта существует в старых данных
+        if not old_data:
+            log.info(f"Валюта {cur} отсутствует в старых данных, пропускаем")
+            continue
+
+        for typ in ["buy", "sale"]:
+            new_val = new_data.get(typ)
+            old_val = old_data.get(typ)
+
+            # ❗ защита от пустых данных
+            if new_val is None or old_val is None:
+                log.debug(f"Отсутствуют данные для {cur} {typ}: new={new_val}, old={old_val}")
+                continue
+
+            try:
+                new_val = float(new_val)
+                old_val = float(old_val)
+            except (ValueError, TypeError) as e:
+                log.debug(f"Ошибка конвертации {cur} {typ}: {e}")
+                continue
+
+            diff = new_val - old_val
+
+            # ❗ фильтр мелких изменений
+            if abs(diff) < THRESHOLD:
+                continue
+
+            if cur not in alerts:
+                alerts[cur] = []
+
+            alerts[cur].append({
+                "type": typ,
+                "old": old_val,
+                "new": new_val,
+                "diff": diff
+            })
+            
+            log.info(f"Обнаружено изменение {cur} {typ}: {old_val:.2f} -> {new_val:.2f} (Δ={diff:+.2f})")
+
+    return alerts
+
+
+def send_currency_alerts(alerts: dict):
+    """Отправка алертов об изменениях курсов"""
+    if not alerts:
+        log.info("Нет изменений курсов для отправки")
+        return
+        
+    if not ENABLE_ALERTS:
+        log.info("Алерты отключены (ENABLE_ALERTS=False)")
+        return
+
+    for cur, changes in alerts.items():
+        table = PrettyTable()
+        table.field_names = ["Операция", "Было", "Стало", "Δ"]
+        table.align = "r"
+        table.align["Операция"] = "l"
+
+        for ch in changes:
+            emoji = "📈" if ch["diff"] > 0 else "📉" if ch["diff"] < 0 else "➖"
+            op = "Покупка" if ch["type"] == "buy" else "Продажа"
+
+            table.add_row([
+                f"{op} {emoji}",
+                f"{ch['old']:.2f}",
+                f"{ch['new']:.2f}",
+                f"{ch['diff']:+.2f}"
+            ])
+
+        msg = (
+            f"💱 <b>Изменение курса {cur}</b>\n"
+            f"<pre>{table}</pre>\n"
+            f"🕒 {datetime.now(PARIS).strftime('%d.%m.%Y %H:%M:%S')}"
+        )
+
+        try:
+            success = tg_msg(msg, parse_mode=ParseMode.HTML)
+            if success:
+                log.info(f"Алерт для {cur} отправлен успешно")
+            else:
+                log.error(f"Не удалось отправить алерт для {cur}")
+        except Exception as e:
+            log.error(f"Ошибка отправки алерта: {e}")
+
 
 def tg_photo(path: str, caption: str = None, additional_ids: list = None):
-    """Отправка фото в Telegram"""
     try:
         if not bot:
             log.error("Бот Telegram не инициализирован")
@@ -449,13 +441,14 @@ def tg_photo(path: str, caption: str = None, additional_ids: list = None):
         return 0
 
 def save_data(data: dict):
+    """Сохраняет весь JSON отчета в локальный файл."""
     try:
         os.makedirs(os.path.dirname(DATA_FILE), exist_ok=True)
         with open(DATA_FILE, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
+        log.info("Локальный JSON успешно обновлен")
     except Exception as e:
-        error_msg = f"Ошибка сохранения: {e}"
-        send_error_to_telegram(error_msg)
+        log.error(f"Ошибка сохранения локального JSON: {e}")
 
 def load_data() -> dict:
     try:
@@ -464,8 +457,7 @@ def load_data() -> dict:
                 return json.load(f)
         return {}
     except Exception as e:
-        error_msg = f"Ошибка загрузки: {e}"
-        send_error_to_telegram(error_msg)
+        log.error(f"Ошибка загрузки: {e}")
         return {}
 
 def font_path():
@@ -478,50 +470,58 @@ def font_path():
         if os.path.exists(p): return p
     raise FileNotFoundError
 
-def get_icon(code: str):
-    if not code: return None
-    try:
-        img = Image.open(BytesIO(requests.get(
-            f"https://openweathermap.org/img/wn/{code}@2x.png", timeout=5
-        ).content)).convert("RGBA")
-        return img.resize((ICON_SIZE, ICON_SIZE), Image.Resampling.LANCZOS)
-    except Exception:
-        return None
+
 
 def draw_currency_chart(d, x, y, w, h, hist, font, currency):
-    if not hist: return y
+    """Отрисовка графика курса валюты"""
+    if not hist:
+        return y
+    
+    # Извлекаем значения для указанного типа операции
     vals = [p[OPERATION_TYPE] for p in hist if OPERATION_TYPE in p]
-    if not vals: return y
+    if not vals:
+        return y
     
     v_min, v_max = min(vals), max(vals)
     if v_min == v_max:
-        rng = v_max * 0.02
+        rng = v_max * 0.02 if v_max != 0 else 1
         v_min = v_max - rng
     else:
         rng = v_max - v_min
     
-    bw = max(2, int(w / (len(vals)*3)))
+    # Вычисляем ширину столбцов
+    bw = max(2, int(w / (len(vals) * 3)))
     gap = bw
-    total = len(vals)*(bw+gap) - gap
+    total = len(vals) * (bw + gap) - gap
     
     if total > w:
-        vals = vals[-w//(bw+gap):]
-        total = len(vals)*(bw+gap)-gap
+        vals = vals[-w // (bw + gap):]
+        total = len(vals) * (bw + gap) - gap
     
-    ox = x + (w-total)//2
+    ox = x + (w - total) // 2
     oy = y + h
     
+    # Рисуем оси
     d.line((ox, y, ox, oy), fill=0)
-    d.line((ox, oy, ox+total, oy), fill=0)
+    d.line((ox, oy, ox + total, oy), fill=0)
     
+    # Рисуем столбцы
     for i, v in enumerate(vals):
-        px = ox + i*(bw+gap)
-        ph = int((v - v_min)/rng*h)
-        d.rectangle((px, oy-ph, px+bw, oy), fill=0)
+        px = ox + i * (bw + gap)
+        if rng != 0:
+            ph = int((v - v_min) / rng * h)
+        else:
+            ph = h // 2
+        d.rectangle((px, oy - ph, px + bw, oy), fill=0)
     
     current_val = vals[-1] if vals else 0
-    operation_name = "buy" if OPERATION_TYPE == "buy" else "sell"
-    d.text((ox+total+5, y), f"■ {currency} ({operation_name}) {current_val}", font=font, fill=0)
+    operation_name = "покупки" if OPERATION_TYPE == "buy" else "продажи"
+    
+    # Рисуем подпись
+    label = f"■ {currency} ({operation_name}) {current_val:.2f}"
+    bbox = d.textbbox((0, 0), label, font=font)
+    label_width = bbox[2] - bbox[0]
+    d.text((ox + total + 5, y + (h // 2)), label, font=font, fill=0)
     return oy + 20
 
 def draw_pretty_table(draw, x, y, headers, rows, font, max_width=WIDTH - 20):
@@ -534,155 +534,368 @@ def draw_pretty_table(draw, x, y, headers, rows, font, max_width=WIDTH - 20):
 
     for line in table_str.splitlines():
         draw.text((x, y), line, font=font, fill=0)
-        bbox = font.getbbox(line)
+        bbox = draw.textbbox((x, y), line, font=font)
         line_height = bbox[3] - bbox[1]
         y += line_height + 4
 
     return y
 
-def make_receipt(weather, curr, hist, namaz, fname="receipt.png"):
-    img = Image.new("L", (WIDTH, 1200), 255)
-    d = ImageDraw.Draw(img)
+def make_receipt(weather: dict, curr: dict, hist: dict, namaz: dict, fname="receipt.png") -> str:
+    """
+    Генерация изображения-отчета с погодой, курсами, намазами и графиком.
+    Иконки будут корректно вставлены с прозрачностью.
+    """
+    img = Image.new("RGBA", (WIDTH, 1600), (255, 255, 255, 255))
+    draw = ImageDraw.Draw(img)
     fp = font_path()
     f24 = ImageFont.truetype(fp, 24)
     f18 = ImageFont.truetype(fp, 18)
     f14 = ImageFont.truetype(fp, 14)
-    f12 = ImageFont.truetype(fp, 12)
 
-    y = 8
+    y = 10
     now = datetime.now(PARIS)
-    d.text((10, y), ["Понедельник", "Вторник", "Среда", "Чт.", "Пт.", "Сб.", "Вс."][now.weekday()], font=f24, fill=0)
+    draw.text((10, y), f"{DAY_NAME_RU[now.weekday()]}, {now.strftime('%d.%m.%Y %H:%M')}", font=f24, fill=0)
+    y += 40
 
-    y += 30
-    d.text((10, y), now.strftime("%d.%m.%Y %H:%M"), font=f24, fill=0)
-    y += 25
-
-    # Текущая погода
-    temp = round(weather["cur_temp"])
-    ico = get_icon(weather["cur_icon"])
+    # --- Текущая погода ---
+    cur_temp = round(weather.get("cur_temp", 0))
+    cur_descr = weather.get("cur_descr", "?")
+    ico, _ = get_weather_icon(weather.get("cur_icon"))
     if ico:
-        icon_rgba = ico.convert("RGBA")
-        mask = icon_rgba.split()[3]
-        icon_l = icon_rgba.convert("L")
-        img.paste(icon_l, (10, y), mask)
-    d.text((50, y + 5), f"{temp}°C🌡️, {weather['cur_descr'][:20]}", font=f24, fill=0)
-    y += ICON_SIZE + 15
+        img.paste(ico, (10, y), ico)
+    draw.text((50, y + 5), f"{cur_temp}°C, {cur_descr}", font=f24, fill=0)
+    y += ICON_SIZE + 20
 
-    # Прогноз
-    d.text((10, y), f"Прогноз на 3 дня {weather.get('last_upd_weather', '?')}:", font=f14, fill=0)
-    y += 25
-
-    heads = ["#", "День", "Темп", "Описание"]
+    # --- Прогноз на 3 дня ---
+    heads = ["#", "День", "Темп", "Погода"]
     rows = []
+    icons = []
     for i in range(1, 4):
-        rows.append(["", weather[f"day_name_{i}"], f"{weather[f'temp_{i}']}°C", weather[f'descr_{i}'][:25]])
+        rows.append([
+            i,
+            weather.get(f"day_name_{i}", "?"),
+            f"{weather.get(f'temp_{i}', '?')}°C",
+            weather.get(f"descr_{i}", "?")[:20]
+        ])
+        icons.append(get_weather_icon(weather.get(f"icon_{i}", ""))[0])
 
-    y_table_start = y
-    y = draw_pretty_table(d, 10, y, heads, rows, f18)
-
-    # Иконки для прогноза
-    row_height = f18.getbbox(rows[0][1])[3] - f18.getbbox(rows[0][1])[1] + 4
-    icon_x = 10 + 4
-    for i in range(3):
-        icon = get_icon(weather.get(f"icon_{i+1}", ""))
-        if icon:
-            icon_rgba = icon.convert("RGBA")
-            mask = icon_rgba.split()[3]
-            icon_l = icon_rgba.convert("L")
-            icon_y = y_table_start + i * int(row_height * 1.5) + 45
-            img.paste(icon_l, (icon_x, icon_y), mask)
-
-    y += 15
-
-    # Курсы валют
-    d.text((10, y), f"Курс валют {curr.get('last_upd_currency', '?')}:", font=f14, fill=0)
+    draw.text((10, y), f"Прогноз на 3 дня (обновлено {weather.get('last_upd_weather', '?')}):", font=f14, fill=0)
     y += 25
-    currency_rows = [[c, curr[c]["buy"], curr[c]["sale"]] for c in CURRENCIES]
-    y = draw_pretty_table(d, 10, y, ["Валюта", "Покупка", "Продажа"], currency_rows, f18)
-    y += 15
+    y = draw_table_with_icons(img, draw, 10, y, heads, rows, f18, icons=icons)
 
-    # Время намаза
-    d.text((10, y), f"Время намаза {namaz.get('last_upd_namaz', '?')}:", font=f14, fill=0)
+    # --- Курсы валют ---
+    draw.text((10, y), f"Курсы валют (обновлено {curr.get('last_upd_currency', '?')}):", font=f14, fill=0)
     y += 25
-    namaz_rows = [[n, namaz.get(n, '?')] for n in ["Фаджр", "Восход", "Зухр", "Аср", "Магриб", "Иша"]]
-    y = draw_pretty_table(d, 10, y, ["Намаз", "Время"], namaz_rows, f18)
-    y += 15
+    currency_rows = [[c, curr.get(c, {}).get("buy", "?"), curr.get(c, {}).get("sale", "?")] for c in CURRENCIES]
+    y = draw_table_with_icons(img, draw, 10, y, ["Валюта", "Покупка", "Продажа"], currency_rows, f18)
 
-    # График курса
-    operation_name = "покупки" if OPERATION_TYPE == "buy" else "продажи"
-    d.text((10, y), f"График {MONITOR_CURRENCY} ({operation_name}):", font=f14, fill=0)
+    # --- Время намаза ---
+    draw.text((10, y), f"Время намаза (обновлено {namaz.get('last_upd_namaz', '?')}):", font=f14, fill=0)
     y += 25
-    y = draw_currency_chart(d, 10, y, WIDTH - 20, 80, hist.get(MONITOR_CURRENCY, []), f14, MONITOR_CURRENCY)
+    namaz_rows = [[n, namaz.get(n, "?")] for n in ["Фаджр", "Восход", "Зухр", "Аср", "Магриб", "Иша"]]
+    y = draw_table_with_icons(img, draw, 10, y, ["Намаз", "Время"], namaz_rows, f18)
 
-    # Футер
+    # --- График курса ---
+    if hist and MONITOR_CURRENCY in hist:
+        operation_name = "покупки" if OPERATION_TYPE == "buy" else "продажи"
+        draw.text((10, y), f"График {MONITOR_CURRENCY} ({operation_name}):", font=f14, fill=0)
+        y += 25
+        y = draw_currency_chart(draw, 10, y, WIDTH - 20, 80, hist.get(MONITOR_CURRENCY, []), f14, MONITOR_CURRENCY)
+
+    # --- Футер ---
     footer_text = "© Generated by rakhmullaev"
-    text_width = f18.getbbox(footer_text)[2]
-    d.text(((WIDTH - text_width) // 2, y), footer_text, font=f18, fill=0)
-    y += 30
+    bbox = draw.textbbox((0, 0), footer_text, font=f18)
+    text_width = bbox[2] - bbox[0]
+    draw.text(((WIDTH - text_width)//2, y), footer_text, font=f18, fill=0)
 
-    img.crop((0, 0, WIDTH, y)).save(fname)
+    img.crop((0, 0, WIDTH, y + 30)).save(fname)
+    log.info(f"Отчет сохранен: {fname}")
     return fname
 
-def send_text_report(weather, curr, hist, namaz):
-    """Отправка текстового отчета с использованием PrettyTable"""
+
+
+def draw_table_with_icons(img: Image.Image, draw: ImageDraw.Draw, x: int, y: int,
+                          headers: list, rows: list, font: ImageFont.ImageFont,
+                          icons: list[Image.Image] | None = None,
+                          line_height: int = None, padding: int = 4) -> int:
+    """
+    Рисует таблицу ASCII с возможностью вставки иконок в первый столбец.
+    img — основной объект Image
+    draw — ImageDraw.Draw
+    icons — список объектов PIL.Image или None.
+    """
+    if line_height is None:
+        sample_text = "A"
+        bbox = draw.textbbox((0, 0), sample_text, font=font)
+        text_height = bbox[3] - bbox[1]
+        line_height = max(ICON_SIZE, text_height) + 4
+
+    columns = list(zip(*([headers] + rows)))
+    col_widths = [max(len(str(item)) for item in col) + padding*2 for col in columns]
+
+    def make_line(left, mid, right, fill):
+        line = left
+        for i, w in enumerate(col_widths):
+            line += fill * w
+            if i < len(col_widths) -1:
+                line += mid
+        line += right
+        return line
+
+    # Верхняя граница
+    draw.text((x, y), make_line("+", "+", "+", "-"), font=font, fill=0)
+    y += line_height
+
+    # Заголовки
+    header_line = "|" + "|".join(f" {h.center(col_widths[i]-2)} " for i, h in enumerate(headers)) + "|"
+    draw.text((x, y), header_line, font=font, fill=0)
+    y += line_height
+
+    # Средняя линия
+    draw.text((x, y), make_line("+", "+", "+", "-"), font=font, fill=0)
+    y += line_height
+
+    # Строки
+    for i, row in enumerate(rows):
+        row_line = "|" + "|".join(f" {str(cell).ljust(col_widths[j]-2)} " for j, cell in enumerate(row)) + "|"
+        draw.text((x, y), row_line, font=font, fill=0)
+
+        # Вставка иконки в первый столбец
+        if icons and i < len(icons) and icons[i]:
+            icon_img = icons[i]
+            cell_x = x + 2
+            cell_y = y + (line_height - icon_img.size[1]) // 2
+            img.paste(icon_img, (cell_x, cell_y), icon_img)
+
+        y += line_height
+
+    # Нижняя граница
+    draw.text((x, y), make_line("+", "+", "+", "-"), font=font, fill=0)
+    y += line_height
+    return y
+
+
+
+def tg_msg(txt: str, parse_mode: str = None, additional_ids: list = None):
+    try:
+        if not bot:
+            log.error("Бот Telegram не инициализирован")
+            return 0
+            
+        recipients = USER_IDS.copy()
+        if additional_ids:
+            recipients.extend(additional_ids)
+            
+        if not recipients:
+            log.error("Список получателей пуст")
+            return 0
+            
+        max_attempts = 3
+        success_count = 0
+        
+        for user_id in recipients:
+            for attempt in range(max_attempts):
+                try:
+                    bot.send_message(
+                        chat_id=user_id,
+                        text=txt,
+                        parse_mode=parse_mode,
+                        timeout=15
+                    )
+                    success_count += 1
+                    break
+                except TelegramError as e:
+                    if attempt == max_attempts - 1:
+                        log.error(f"Ошибка отправки пользователю {user_id} после {max_attempts} попыток: {e}")
+                    else:
+                        time.sleep(2)
+                except Exception as e:
+                    log.error(f"Неожиданная ошибка при отправке пользователю {user_id}: {e}")
+                    break
+        
+        log.info(f"Сообщение отправлено {success_count} из {len(recipients)} пользователей")
+        return success_count
+        
+    except Exception as e:
+        log.error(f"Критическая ошибка в функции tg_msg: {e}")
+        return 0
+
+
+def get_weather_icon(icon_code: str) -> tuple[Image.Image | None, str]:
+    """
+    Скачивает иконку погоды по коду OpenWeather и возвращает:
+    (Image с прозрачностью RGBA или None, эмодзи строки)
+    """
+    
+    # Словарь соответствия иконок и эмодзи
+    OW_ICON_EMOJI = {
+        "01d": "☀️", "01n": "🌙",
+        "02d": "🌤️", "02n": "☁️",
+        "03d": "☁️", "03n": "☁️",
+        "04d": "☁️", "04n": "☁️",
+        "09d": "🌧️", "09n": "🌧️",
+        "10d": "🌦️", "10n": "🌦️",
+        "11d": "⛈️", "11n": "⛈️",
+        "13d": "❄️", "13n": "❄️",
+        "50d": "🌫️", "50n": "🌫️",
+    }
+
+    emoji = OW_ICON_EMOJI.get(icon_code, "")
+    
+    if not icon_code:
+        return None, emoji
+
+    url = f"https://openweathermap.org/img/wn/{icon_code}@2x.png"
+
+    try:
+        resp = requests.get(url, timeout=5)
+        resp.raise_for_status()
+
+        img = Image.open(BytesIO(resp.content)).convert("RGBA")
+        img = img.resize((ICON_SIZE, ICON_SIZE), Image.Resampling.LANCZOS)
+
+        return img, emoji
+
+    except Exception as e:
+        log.error(f"Не удалось загрузить иконку {icon_code}: {e}")
+        return None, emoji
+
+    
+
+def send_text_report(weather: dict, curr: dict, namaz: dict) -> bool:
+    """
+    Формирует текстовый отчет с эмодзи и отправляет его в Telegram через PrettyTable.
+    Эмодзи соответствуют кодам иконок OpenWeather.
+    Возвращает True при успехе, False при ошибке.
+    """
     try:
         now = datetime.now(PARIS)
-        
-        # Основная таблица с погодой
+
+        # --- Таблица текущей погоды ---
         weather_table = PrettyTable()
-        weather_table.field_names = ["День", "Темп"]
+        weather_table.field_names = ["Время", "Темп", "Погода"]
         weather_table.align = "l"
-        weather_table._max_width = {"День": 20, "Темп": 8}
-        weather_table.add_row([weather.get('last_upd_weather', '?'), f"{round(weather['cur_temp'])} °C🌡️"])
-        
-        # Таблица прогноза
+
+        cur_icon_code = weather.get('cur_icon', '')
+        _, cur_icon_emoji = get_weather_icon(cur_icon_code)
+
+        cur_descr = weather.get('cur_descr', '')[:15].capitalize()
+        cur_temp = f"{round(weather.get('cur_temp', 0))}°C"
+        weather_table.add_row([weather.get('last_upd_weather', '?'), cur_temp, cur_descr])
+
+        # --- Таблица прогноза на 3 дня ---
         forecast_table = PrettyTable()
         forecast_table.field_names = ["День", "Темп", "Погода"]
         forecast_table.align = "l"
+
         for i in range(1, 4):
-            forecast_table.add_row([
-                weather[f"day_name_{i}"],
-                weather[f"temp_{i}"],
-                weather[f'descr_{i}'].capitalize()
-            ])
-        
-        # Таблица курсов валют
+            day = weather.get(f"day_name_{i}", "?")
+            temp = weather.get(f"temp_{i}", "?")
+            icon_code = weather.get(f"icon_{i}", "")
+            
+            # Получаем иконку и эмодзи через функцию
+            _, icon_emoji = get_weather_icon(icon_code)
+            
+            descr = weather.get(f"descr_{i}", "")[:15].capitalize()
+            forecast_table.add_row([day, temp, f"{icon_emoji} {descr}"])
+
+
+        # --- Таблица курсов валют ---
         currency_table = PrettyTable()
-        currency_table.field_names = ["Валюта", "Покупка", "Продажа"]
-        currency_table.align = "r"
-        currency_table.align["Валюта"] = "l"
-        for currency in CURRENCIES:
-            currency_table.add_row([
-                currency,
-                curr[currency]["buy"],
-                curr[currency]["sale"]
-            ])
-        
-        # Таблица намаза
+        currency_table.field_names = ["Валюта", "Курс Покупки", "Курс Продажи"]
+        currency_table.align = "l"
+        for c in CURRENCIES:
+            currency_table.add_row([c, curr.get(c, {}).get("buy", "?"), curr.get(c, {}).get("sale", "?")])
+
+        # --- Таблица времени намаза ---
         namaz_table = PrettyTable()
         namaz_table.field_names = ["Намаз", "Время"]
         namaz_table.align = "l"
         for name in ["Фаджр", "Восход", "Зухр", "Аср", "Магриб", "Иша"]:
-            namaz_table.add_row([name, namaz.get(name, '?')])
-        
-        # Формируем сообщение
+            namaz_table.add_row([name, namaz.get(name, "?")])
+
+        # --- Формируем сообщение ---
         message = (
             f"<b>📅 Отчет на {now.strftime('%d.%m.%Y %H:%M')}</b>\n\n"
-            f"<b>🌤 {weather['cur_descr'].capitalize()}:</b>\n<pre>{weather_table}</pre>\n\n"
+            f"<b>{cur_icon_emoji}Текущая погода ({weather.get('last_upd_weather', '?')}):</b>\n<pre>{weather_table}</pre>\n\n"
             f"<b>📊 Прогноз на 3 дня:</b>\n<pre>{forecast_table}</pre>\n\n"
             f"<b>💱 Курсы валют ({curr.get('last_upd_currency', '?')}):</b>\n<pre>{currency_table}</pre>\n\n"
             f"<b>🕌 Время намаза ({namaz.get('last_upd_namaz', '?')}):</b>\n<pre>{namaz_table}</pre>\n\n"
             f"<i>Данные обновляются автоматически</i>"
         )
-        
+
+        # --- Отправка в Telegram ---
         tg_msg(message, parse_mode=ParseMode.HTML)
         return True
-    
+
     except Exception as e:
-        error_msg = f"Ошибка формирования текстового отчета: {e}"
-        log.error(error_msg)
-        send_error_to_telegram(error_msg)
+        log.error(f"Ошибка формирования или отправки отчета: {e}")
         return False
+
+
+
+
+
+def generate_json_report(weather, curr, hist, namaz):
+    """Генерация JSON отчета"""
+    report = {
+        "weather": weather,
+        "currency_rates": curr,
+        "currency_history": hist,
+        "namaz": namaz,
+        "generated_at": datetime.now(PARIS).strftime("%d.%m.%Y %H:%M:%S")
+    }
+    
+    json_file = os.path.join(SCRIPT_DIR, "data", "report.json")
+    os.makedirs(os.path.dirname(json_file), exist_ok=True)
+    
+    with open(json_file, "w", encoding="utf-8") as f:
+        json.dump(report, f, ensure_ascii=False, indent=2)
+    
+    return json_file
+    
+    
+def save_currency_rates(rates: dict):
+    """Сохраняем новые курсы валют в локальный файл JSON корректно."""
+    try:
+        data = load_data()
+
+        clean_rates = {}
+        for cur in CURRENCIES:
+            cur_data = rates.get(cur, {})
+            clean_rates[cur] = {
+                "buy": float(cur_data.get("buy", 0)),
+                "sale": float(cur_data.get("sale", 0))
+            }
+        clean_rates["last_upd_currency"] = datetime.now(PARIS).strftime("%d.%m.%Y %H:%M:%S")
+
+        data["currency_rates"] = clean_rates
+        
+        # Сохраняем историю курсов
+        if "currency_history" not in data:
+            data["currency_history"] = {}
+        
+        for cur in CURRENCIES:
+            if cur not in data["currency_history"]:
+                data["currency_history"][cur] = []
+            
+            # Добавляем новую запись
+            new_entry = {
+                "buy": clean_rates[cur]["buy"],
+                "sale": clean_rates[cur]["sale"],
+                "timestamp": datetime.now(PARIS).strftime("%d.%m.%Y %H:%M:%S")
+            }
+            data["currency_history"][cur].append(new_entry)
+            
+            # Ограничиваем историю 30 записями
+            if len(data["currency_history"][cur]) > 30:
+                data["currency_history"][cur] = data["currency_history"][cur][-30:]
+        
+        save_data(data)
+        log.info("Курсы валют успешно сохранены в локальный JSON")
+    except Exception as e:
+        log.error(f"Ошибка сохранения курсов валют: {e}")
+        
 
 def main():
     current_hour = datetime.now().hour
@@ -693,11 +906,38 @@ def main():
             log.info("Получение свежих данных...")
             weather = get_weather(use_live=True)
             namaz = get_namaz(use_live=True)
+            
             rates = get_rates(use_live=True)
+
+            # Берем старые курсы ТОЛЬКО с GitHub
+            old_rates = get_previous_currency()
+            
+            # Логируем для отладки
+            if old_rates:
+                log.info(f"Старые курсы с GitHub: {old_rates}")
+                # Проверяем наличие всех валют
+                for cur in CURRENCIES:
+                    if cur in old_rates:
+                        log.info(f"  {cur}: покупка={old_rates[cur].get('buy')}, продажа={old_rates[cur].get('sale')}")
+                    else:
+                        log.warning(f"Валюта {cur} отсутствует в старых данных с GitHub")
+            else:
+                log.warning("Старые данные с GitHub не получены, алерты не будут отправлены")
+
+            alerts = check_currency_changes(rates, old_rates)
+
+            # Отправляем алерты только если есть изменения и GitHub был доступен
+            if alerts and old_rates:
+                send_currency_alerts(alerts)
+            elif alerts and not old_rates:
+                log.info("Обнаружены изменения, но GitHub недоступен — алерты не отправлены")
+            else:
+                log.info("Изменений курсов не обнаружено")
+
+            save_currency_rates(rates)
             
             if not all([weather, namaz, rates]):
                 log.error(f"Не удалось получить необходимые данные: погода={bool(weather)}, намаз={bool(namaz)}, курсы={bool(rates)}")
-                # Попробуем использовать файловые данные как fallback
                 weather = weather or get_weather(use_live=False)
                 namaz = namaz or get_namaz(use_live=False)
                 rates = rates or get_rates(use_live=False)
@@ -710,7 +950,16 @@ def main():
             data = load_data()
             history = data.get("currency_history", {})
             
-            send_text_report(weather, rates, history, namaz)
+            # Отправляем текстовый отчет
+            #send_text_report(weather, rates, namaz)
+            
+            # Генерируем JSON отчет
+            json_report = generate_json_report(weather, rates, history, namaz)
+            log.info(f"JSON отчет сохранен: {json_report}")
+            
+            # Создаем и отправляем изображение
+            #receipt_file = make_receipt(weather, rates, history, namaz)
+            #tg_photo(receipt_file, caption="📊 Ежедневный отчет")
             
         elif MODE == "UPD_NAMAZ":
             namaz = get_namaz(use_live=True)
@@ -725,16 +974,18 @@ def main():
                 return
                 
             rates = get_rates(force_update=True, use_live=True)
-            if rates:
-                history = process_currency_history(rates)
-                log.info(f"Курсы валют успешно обновлены: {rates.get('last_upd_currency')}")
-            else:
-                log.error("Не удалось обновить курсы валют")
+            save_currency_rates(rates)
+            
+            # Также проверяем изменения с GitHub при ручном обновлении
+            old_rates = get_previous_currency()
+            if old_rates:
+                alerts = check_currency_changes(rates, old_rates)
+                if alerts:
+                    send_currency_alerts(alerts)
                 
         log.info("Завершено успешно")
     except Exception as e:
-        error_msg = f"Критическая ошибка: {e}"
-        send_error_to_telegram(error_msg)
+        log.error(f"Критическая ошибка: {e}")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
