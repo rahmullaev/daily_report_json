@@ -1,0 +1,8 @@
+venv/
+__pycache__/
+*.pyc
+.env
+*.bat
+*.bkp
+data/*.json
+Log.log

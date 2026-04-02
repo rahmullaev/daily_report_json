@@ -6,7 +6,7 @@ on:
     branches:
       - main
   schedule:
-    - cron: '0 7,10,13,16,19 * * *'   # запуск по расписанию
+    - cron: '0 2,10,13,16,19 * * *'   # запуск по расписанию
     
 permissions:
   contents: write   # ⬅️ даём право на пуш в репозиторий
@@ -20,29 +20,43 @@ jobs:
       # 1️⃣ Клонирование кода
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0  # Полная история для коммита
 
       # 2️⃣ Настройка Python
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
-          python-version: '3.9'
+          python-version: '3.10'
+
+      # ✅ Кэш pip-зависимостей
+      - name: Cache pip
+        uses: actions/cache@v3
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
 
       # 3️⃣ Установка зависимостей
       - name: Install dependencies
         run: |
-          python -m pip install --upgrade pip
-          pip install \
-            requests==2.31.0 \
-            pillow==10.0.0 \
-            "python-telegram-bot==13.7" \
-            prettytable==3.8.0 \
-            python-dateutil==2.8.2
+            python -m pip install --upgrade pip
+            pip install \
+              requests==2.31.0 \
+              pillow==10.0.0 \
+              "python-telegram-bot==13.7" \
+              prettytable==3.8.0 \
+              python-dateutil==2.8.2
 
-      # 4️⃣ Создание папки и пустого JSON
+      # 4️⃣ Создание папки data, если её нет
       - name: Create data directory
         run: |
           mkdir -p data
-          touch data/weather_data.json
+          if [ ! -f data/weather_data.json ]; then
+            echo "{}" > data/weather_data.json
+          fi
 
       # 5️⃣ Запуск основного скрипта
       - name: Run full report
@@ -58,19 +72,32 @@ jobs:
       - name: Show JSON content
         run: cat data/weather_data.json
 
-      # 7️⃣ Публикация в GitHub Pages
+      # 7️⃣ ✅ ВАЖНО: Коммитим и пушим изменения обратно в репозиторий
+      - name: Commit and push changes
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          git add data/weather_data.json
+          if git diff --cached --quiet; then
+            echo "📝 Нет изменений для коммита"
+          else
+            git commit -m "🔄 Auto-update weather data [skip ci]"
+            git push
+            echo "✅ Изменения отправлены в репозиторий"
+          fi
+
+      # 8️⃣ Публикация в GitHub Pages
       - name: Publish JSON to GitHub Pages
         uses: peaceiris/actions-gh-pages@v4
         with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}   # ⬅️ встроенный токен
+          github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: ./data
           publish_branch: gh-pages
           force_orphan: true
-          user_name: github-actions
-          user_email: github-actions@users.noreply.github.com
+          user_name: github-actions[bot]
+          user_email: github-actions[bot]@users.noreply.github.com
 
-
-      # 8️⃣ Артефакты при ошибке
+      # 9️⃣ Артефакты при ошибке
       - name: Upload logs on failure
         if: failure()
         uses: actions/upload-artifact@v4
