@@ -129,7 +129,7 @@ def reindex_history(history_list: List[dict]) -> List[dict]:
     return history_list
 
 def get_weather(use_live: bool = USE_LIVE) -> Optional[Dict[str, Any]]:
-    """Получение данных о погоде"""
+    """Получение текущей погоды и прогноза на 3 дня"""
     if not use_live:
         log.info("📂 Использую сохраненные данные погоды")
         data = load_data().get("weather", {})
@@ -139,59 +139,248 @@ def get_weather(use_live: bool = USE_LIVE) -> Optional[Dict[str, Any]]:
         if not OW_API_KEY:
             log.error("❌ OW_API_KEY не установлен!")
             return None
-            
-        params = {"id": CITY_ID, "units": "metric", "lang": "ru", "APPID": OW_API_KEY}
+
+        params = {
+            "id": CITY_ID,
+            "units": "metric",
+            "lang": "ru",
+            "APPID": OW_API_KEY
+        }
+
         log.info(f"🌤️ Запрос погоды для города {CITY_ID}")
-        
-        cur = requests.get(CURRENT_URL, params=params, timeout=10)
+
+        # ─────────────────────────────────────────────
+        # ТЕКУЩАЯ ПОГОДА
+        # ─────────────────────────────────────────────
+        cur = requests.get(
+            CURRENT_URL,
+            params=params,
+            timeout=10
+        )
+
         if cur.status_code != 200:
-            log.error(f"Ошибка погоды: {cur.status_code}")
+            log.error(
+                f"Ошибка текущей погоды: "
+                f"{cur.status_code} - {cur.text}"
+            )
             return None
-            
+
         cur_data = cur.json()
-        
-        fc = requests.get(FORECAST_URL, params=params, timeout=10)
+
+        # ─────────────────────────────────────────────
+        # ПРОГНОЗ
+        # ─────────────────────────────────────────────
+        fc = requests.get(
+            FORECAST_URL,
+            params=params,
+            timeout=10
+        )
+
         if fc.status_code != 200:
-            log.error(f"Ошибка прогноза: {fc.status_code}")
+            log.error(
+                f"Ошибка прогноза: "
+                f"{fc.status_code} - {fc.text}"
+            )
             return None
-            
+
         fc_data = fc.json()
 
-        # Прогноз на 3 дня
+        # Сегодня по времени Парижа
         today = datetime.now(PARIS).date()
+
+        # ─────────────────────────────────────────────
+        # РАЗБИВАЕМ ПРОГНОЗ ПО ДНЯМ
+        # ВАЖНО: используем локальное время Europe/Paris,
+        # а не UTC, чтобы около полуночи дни не съезжали.
+        # ─────────────────────────────────────────────
         buckets = defaultdict(list)
+
         for itm in fc_data.get("list", []):
-            dt = datetime.utcfromtimestamp(itm["dt"]).date()
-            buckets[dt.toordinal()].append(itm)
+            try:
+                local_dt = datetime.fromtimestamp(
+                    itm["dt"],
+                    PARIS
+                )
+
+                local_date = local_dt.date()
+
+                buckets[local_date].append(itm)
+
+            except Exception as e:
+                log.warning(
+                    f"Не удалось обработать элемент прогноза: {e}"
+                )
 
         forecast = {}
-        day_names = ["Пн.", "Вт.", "Ср.", "Чт.", "Пт.", "Сб.", "Вс."]
+
+        day_names = [
+            "Пн.",
+            "Вт.",
+            "Ср.",
+            "Чт.",
+            "Пт.",
+            "Сб.",
+            "Вс."
+        ]
+
+        # ─────────────────────────────────────────────
+        # ПРОГНОЗ НА СЛЕДУЮЩИЕ 3 ДНЯ
+        # Берём запись, ближайшую к 12:00 местного времени
+        # ─────────────────────────────────────────────
         for off in range(1, 4):
+
             tgt = today + timedelta(days=off)
-            bucket = buckets.get(tgt.toordinal(), [])
-            if bucket:
-                mid = min(bucket, key=lambda x: abs(datetime.utcfromtimestamp(x["dt"]).hour - 12))
-                loc = datetime.fromtimestamp(mid["dt"], PARIS)
-                forecast.update({
-                    f"day_name_{off}": day_names[loc.weekday()],
-                    f"temp_{off}": f"{mid['main']['temp']:+.0f}",
-                    f"icon_{off}": mid["weather"][0]["icon"],
-                    f"descr_{off}": mid["weather"][0]["description"],
-                })
+
+            bucket = buckets.get(tgt, [])
+
+            if not bucket:
+                log.warning(
+                    f"⚠️ Нет прогноза на {tgt.strftime('%d.%m.%Y')}"
+                )
+                continue
+
+            # Выбираем прогноз максимально близкий к 12:00
+            mid = min(
+                bucket,
+                key=lambda x: abs(
+                    datetime.fromtimestamp(
+                        x["dt"],
+                        PARIS
+                    ).hour - 12
+                )
+            )
+
+            loc = datetime.fromtimestamp(
+                mid["dt"],
+                PARIS
+            )
+
+            main_data = mid.get("main", {})
+            weather_list = mid.get("weather", [])
+
+            weather_item = (
+                weather_list[0]
+                if weather_list
+                else {}
+            )
+
+            # ───────────────────────────────────────
+            # Сохраняем старые поля БЕЗ ИЗМЕНЕНИЙ
+            # + добавляем humidity и pressure
+            # ───────────────────────────────────────
+            forecast.update({
+
+                f"day_name_{off}":
+                    day_names[loc.weekday()],
+
+                f"temp_{off}":
+                    f"{main_data.get('temp', 0):+.0f}",
+
+                f"icon_{off}":
+                    weather_item.get("icon", ""),
+
+                f"descr_{off}":
+                    weather_item.get(
+                        "description",
+                        ""
+                    ),
+
+                # НОВОЕ:
+                f"humidity_{off}":
+                    int(main_data.get("humidity", 0)),
+
+                # НОВОЕ:
+                # OpenWeather возвращает давление в hPa
+                f"pressure_{off}":
+                    int(main_data.get("pressure", 0)),
+            })
+
+        # ─────────────────────────────────────────────
+        # ТЕКУЩИЕ ДАННЫЕ
+        # ─────────────────────────────────────────────
+        current_main = cur_data.get("main", {})
+        current_weather_list = cur_data.get(
+            "weather",
+            []
+        )
+
+        current_weather = (
+            current_weather_list[0]
+            if current_weather_list
+            else {}
+        )
 
         weather_data = {
-            "cur_temp": cur_data["main"]["temp"],
-            "cur_icon": cur_data["weather"][0]["icon"],
-            "cur_descr": cur_data["weather"][0]["description"],
-            "last_upd": datetime.now(PARIS).strftime("%d.%m.%Y %H:%M:%S"),
+
+            # Старые поля
+            "cur_temp":
+                current_main.get("temp", 0),
+
+            "cur_icon":
+                current_weather.get("icon", ""),
+
+            "cur_descr":
+                current_weather.get(
+                    "description",
+                    ""
+                ),
+
+            # ───────────────────────────────────────
+            # НОВЫЕ ПОЛЯ НА СЕГОДНЯ
+            # ───────────────────────────────────────
+
+            # Влажность %
+            "cur_humidity":
+                int(current_main.get("humidity", 0)),
+
+            # Давление hPa
+            "cur_pressure":
+                int(current_main.get("pressure", 0)),
+
+            # Время обновления
+            "last_upd":
+                datetime.now(PARIS).strftime(
+                    "%d.%m.%Y %H:%M:%S"
+                ),
+
+            # Прогноз 1-3 дня
             **forecast
         }
 
-        log.info(f"✅ Погода: {weather_data['cur_temp']}°C, {weather_data['cur_descr']}")
+        log.info(
+            "✅ Погода: "
+            f"{weather_data['cur_temp']}°C, "
+            f"{weather_data['cur_descr']}, "
+            f"💧 {weather_data['cur_humidity']}%, "
+            f"🌡️ {weather_data['cur_pressure']} hPa"
+        )
+
+        # Дополнительный лог прогноза
+        for off in range(1, 4):
+
+            if f"temp_{off}" in weather_data:
+
+                log.info(
+                    f"📅 День {off}: "
+                    f"{weather_data.get(f'day_name_{off}', '')} "
+                    f"{weather_data.get(f'temp_{off}', '')}°C, "
+                    f"💧 {weather_data.get(f'humidity_{off}', 0)}%, "
+                    f"🌡️ {weather_data.get(f'pressure_{off}', 0)} hPa"
+                )
+
         return weather_data
-        
+
+    except requests.exceptions.Timeout:
+        log.error("❌ Таймаут при запросе погоды")
+        return None
+
+    except requests.exceptions.RequestException as e:
+        log.error(f"❌ Ошибка HTTP при получении погоды: {e}")
+        return None
+
     except Exception as e:
-        log.error(f"Ошибка получения погоды: {e}")
+        log.error(f"❌ Ошибка получения погоды: {e}")
+        log.error(traceback.format_exc())
         return None
 
 def get_namaz(use_live: bool = True) -> Dict[str, str]:
