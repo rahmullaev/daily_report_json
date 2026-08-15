@@ -1,17 +1,17 @@
 {
   "weather": {
-    "cur_temp": 33.53,
+    "cur_temp": 36.54,
     "cur_icon": "03d",
     "cur_descr": "переменная облачность",
-    "cur_humidity": 22,
-    "cur_pressure": 1014,
-    "last_upd": "15.08.2026 12:26:24",
+    "cur_humidity": 17,
+    "cur_pressure": 1012,
+    "last_upd": "15.08.2026 15:33:22",
     "day_name_1": "Вс.",
-    "temp_1": "+25",
+    "temp_1": "+26",
     "icon_1": "01d",
     "descr_1": "ясно",
-    "humidity_1": 45,
-    "pressure_1": 1014,
+    "humidity_1": 47,
+    "pressure_1": 1015,
     "day_name_2": "Пн.",
     "temp_2": "+23",
     "icon_2": "04d",
@@ -32,7 +32,7 @@
     "Аср": "17:38",
     "Магриб": "20:52",
     "Иша": "22:53",
-    "last_upd": "15.08.2026 12:26:24"
+    "last_upd": "15.08.2026 15:33:22"
   },
   "currency_rates": {
     "EUR": {
@@ -43,95 +43,81 @@
       "buy": 462.0,
       "sale": 465.5
     },
-    "last_upd": "15.08.2026 12:26:29"
+    "last_upd": "15.08.2026 15:33:38"
   },
   "temp_history": [
-    {
-      "temp": 36.91,
-      "icon": "01d",
-      "descr": "ясно",
-      "timestamp": "13.08.2026 16:23:00",
-      "index": 1
-    },
     {
       "temp": 36.54,
       "icon": "01d",
       "descr": "ясно",
       "timestamp": "13.08.2026 18:59:23",
-      "index": 2
+      "index": 1
     },
     {
       "temp": 27.16,
       "icon": "01n",
       "descr": "ясно",
       "timestamp": "13.08.2026 21:56:35",
-      "index": 3
+      "index": 2
     },
     {
       "temp": 17.97,
       "icon": "01n",
       "descr": "ясно",
       "timestamp": "14.08.2026 06:11:45",
-      "index": 4
+      "index": 3
     },
     {
       "temp": 34.55,
       "icon": "01d",
       "descr": "ясно",
       "timestamp": "14.08.2026 12:59:36",
-      "index": 5
+      "index": 4
     },
     {
       "temp": 37.26,
       "icon": "01d",
       "descr": "ясно",
       "timestamp": "14.08.2026 16:16:22",
-      "index": 6
+      "index": 5
     },
     {
       "temp": 37.55,
       "icon": "02d",
       "descr": "небольшая облачность",
       "timestamp": "14.08.2026 18:57:54",
-      "index": 7
+      "index": 6
     },
     {
       "temp": 28.55,
       "icon": "04n",
       "descr": "пасмурно",
       "timestamp": "14.08.2026 21:49:28",
-      "index": 8
+      "index": 7
     },
     {
       "temp": 22.43,
       "icon": "01n",
       "descr": "ясно",
       "timestamp": "15.08.2026 04:55:06",
-      "index": 9
+      "index": 8
     },
     {
       "temp": 33.53,
       "icon": "03d",
       "descr": "переменная облачность",
       "timestamp": "15.08.2026 12:26:24",
+      "index": 9
+    },
+    {
+      "temp": 36.54,
+      "icon": "03d",
+      "descr": "переменная облачность",
+      "timestamp": "15.08.2026 15:33:22",
       "index": 10
     }
   ],
   "currency_history": [
-    {
-      "timestamp": "13.08.2026 16:23:05",
-      "rates": {
-        "USD": {
-          "buy": 463.5,
-          "sale": 467.0
-        },
-        "EUR": {
-          "buy": 534.19,
-          "sale": 539.19
-        }
-      },
-      "index": 1
-    },
     {
       "timestamp": "13.08.2026 18:59:27",
       "rates": {
@@ -144,7 +130,7 @@
           "sale": 539.69
         }
       },
-      "index": 2
+      "index": 1
     },
     {
       "timestamp": "13.08.2026 21:56:39",
@@ -158,7 +144,7 @@
           "sale": 539.69
         }
       },
-      "index": 3
+      "index": 2
     },
     {
       "timestamp": "14.08.2026 06:11:49",
@@ -172,7 +158,7 @@
           "sale": 539.19
         }
       },
-      "index": 4
+      "index": 3
     },
     {
       "timestamp": "14.08.2026 12:59:41",
@@ -186,7 +172,7 @@
           "sale": 537.92
         }
       },
-      "index": 5
+      "index": 4
     },
     {
       "timestamp": "14.08.2026 16:16:27",
@@ -200,7 +186,7 @@
           "sale": 537.92
         }
       },
-      "index": 6
+      "index": 5
     },
     {
       "timestamp": "14.08.2026 18:57:59",
@@ -214,7 +200,7 @@
           "sale": 538.42
         }
       },
-      "index": 7
+      "index": 6
     },
     {
       "timestamp": "14.08.2026 21:49:33",
@@ -228,7 +214,7 @@
           "sale": 538.42
         }
       },
-      "index": 8
+      "index": 7
     },
     {
       "timestamp": "15.08.2026 04:55:12",
@@ -242,10 +228,24 @@
           "sale": 538.42
         }
       },
-      "index": 9
+      "index": 8
     },
     {
       "timestamp": "15.08.2026 12:26:29",
+      "rates": {
+        "USD": {
+          "buy": 462.0,
+          "sale": 465.5
+        },
+        "EUR": {
+          "buy": 532.92,
+          "sale": 537.92
+        }
+      },
+      "index": 9
+    },
+    {
+      "timestamp": "15.08.2026 15:33:38",
       "rates": {
         "USD": {
           "buy": 462.0,
