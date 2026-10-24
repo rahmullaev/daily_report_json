@@ -1,29 +1,29 @@
 {
   "weather": {
-    "cur_temp": 9.41,
+    "cur_temp": 9.4,
     "cur_icon": "10n",
     "cur_descr": "дождь",
     "cur_humidity": 87,
-    "cur_pressure": 1015,
-    "last_upd": "24.10.2026 20:39:34",
+    "cur_pressure": 1012,
+    "last_upd": "24.10.2026 23:26:55",
     "day_name_1": "Вс.",
     "temp_1": "+13",
     "icon_1": "10d",
     "descr_1": "небольшой дождь",
-    "humidity_1": 71,
-    "pressure_1": 1006,
+    "humidity_1": 73,
+    "pressure_1": 1005,
     "day_name_2": "Пн.",
-    "temp_2": "+13",
+    "temp_2": "+14",
     "icon_2": "04d",
     "descr_2": "пасмурно",
     "humidity_2": 60,
     "pressure_2": 1020,
     "day_name_3": "Вт.",
     "temp_3": "+17",
-    "icon_3": "02d",
-    "descr_3": "небольшая облачность",
-    "humidity_3": 71,
-    "pressure_3": 1018
+    "icon_3": "04d",
+    "descr_3": "облачно с прояснениями",
+    "humidity_3": 69,
+    "pressure_3": 1017
   },
   "namaz": {
     "Фаджр": "06:23",
@@ -32,7 +32,7 @@
     "Аср": "16:00",
     "Магриб": "18:28",
     "Иша": "20:09",
-    "last_upd": "24.10.2026 20:39:34"
+    "last_upd": "24.10.2026 23:26:56"
   },
   "currency_rates": {
     "EUR": {
@@ -43,95 +43,81 @@
       "buy": 452.0,
       "sale": 455.5
     },
-    "last_upd": "24.10.2026 20:39:38"
+    "last_upd": "24.10.2026 23:27:00"
   },
   "temp_history": [
-    {
-      "temp": 8.54,
-      "icon": "02n",
-      "descr": "небольшая облачность",
-      "timestamp": "21.10.2026 21:58:39",
-      "index": 1
-    },
     {
       "temp": 5.85,
       "icon": "01d",
       "descr": "ясно",
       "timestamp": "22.10.2026 09:20:04",
-      "index": 2
+      "index": 1
     },
     {
       "temp": 12.41,
       "icon": "04d",
       "descr": "пасмурно",
       "timestamp": "22.10.2026 16:58:00",
-      "index": 3
+      "index": 2
     },
     {
       "temp": 10.74,
       "icon": "01n",
       "descr": "ясно",
       "timestamp": "22.10.2026 21:51:06",
-      "index": 4
+      "index": 3
     },
     {
       "temp": 10.35,
       "icon": "10d",
       "descr": "небольшой дождь",
       "timestamp": "23.10.2026 09:13:16",
-      "index": 5
+      "index": 4
     },
     {
       "temp": 11.54,
       "icon": "04d",
       "descr": "пасмурно",
       "timestamp": "23.10.2026 16:46:45",
-      "index": 6
+      "index": 5
     },
     {
       "temp": 10.27,
       "icon": "04n",
       "descr": "облачно с прояснениями",
       "timestamp": "23.10.2026 21:51:54",
-      "index": 7
+      "index": 6
     },
     {
       "temp": 7.35,
       "icon": "04d",
       "descr": "пасмурно",
       "timestamp": "24.10.2026 09:01:55",
-      "index": 8
+      "index": 7
     },
     {
       "temp": 11.47,
       "icon": "04d",
       "descr": "облачно с прояснениями",
       "timestamp": "24.10.2026 15:53:57",
-      "index": 9
+      "index": 8
     },
     {
       "temp": 9.41,
       "icon": "10n",
       "descr": "дождь",
       "timestamp": "24.10.2026 20:39:34",
+      "index": 9
+    },
+    {
+      "temp": 9.4,
+      "icon": "10n",
+      "descr": "дождь",
+      "timestamp": "24.10.2026 23:26:55",
       "index": 10
     }
   ],
   "currency_history": [
-    {
-      "timestamp": "21.10.2026 21:58:43",
-      "rates": {
-        "USD": {
-          "buy": 446.0,
-          "sale": 449.5
-        },
-        "EUR": {
-          "buy": 499.16,
-          "sale": 505.16
-        }
-      },
-      "index": 1
-    },
     {
       "timestamp": "22.10.2026 09:20:08",
       "rates": {
@@ -144,7 +130,7 @@
           "sale": 506.68
         }
       },
-      "index": 2
+      "index": 1
     },
     {
       "timestamp": "22.10.2026 16:58:05",
@@ -158,7 +144,7 @@
           "sale": 505.44
         }
       },
-      "index": 3
+      "index": 2
     },
     {
       "timestamp": "22.10.2026 21:51:11",
@@ -172,7 +158,7 @@
           "sale": 505.94
         }
       },
-      "index": 4
+      "index": 3
     },
     {
       "timestamp": "23.10.2026 09:13:20",
@@ -186,7 +172,7 @@
           "sale": 508.13
         }
       },
-      "index": 5
+      "index": 4
     },
     {
       "timestamp": "23.10.2026 16:46:49",
@@ -200,7 +186,7 @@
           "sale": 511.6
         }
       },
-      "index": 6
+      "index": 5
     },
     {
       "timestamp": "23.10.2026 21:52:00",
@@ -214,7 +200,7 @@
           "sale": 512.1
         }
       },
-      "index": 7
+      "index": 6
     },
     {
       "timestamp": "24.10.2026 09:02:00",
@@ -228,7 +214,7 @@
           "sale": 510.48
         }
       },
-      "index": 8
+      "index": 7
     },
     {
       "timestamp": "24.10.2026 15:54:02",
@@ -242,10 +228,24 @@
           "sale": 510.48
         }
       },
-      "index": 9
+      "index": 8
     },
     {
       "timestamp": "24.10.2026 20:39:38",
+      "rates": {
+        "USD": {
+          "buy": 452.0,
+          "sale": 455.5
+        },
+        "EUR": {
+          "buy": 504.98,
+          "sale": 510.98
+        }
+      },
+      "index": 9
+    },
+    {
+      "timestamp": "24.10.2026 23:27:00",
       "rates": {
         "USD": {
           "buy": 452.0,
