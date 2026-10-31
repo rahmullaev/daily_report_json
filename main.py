@@ -118,6 +118,24 @@ def save_data(data: dict):
             json.dump(data, f, ensure_ascii=False, indent=2)
         temp_count = len(data.get('temp_history', []))
         curr_count = len(data.get('currency_history', []))
+        # Publish two smaller JSON files alongside the unchanged full report.
+        # Compact separators avoid unnecessary network transfer to ESP8266.
+        current_data = {
+            "weather": data.get("weather", {}),
+            "namaz": data.get("namaz", {}),
+            "currency_rates": data.get("currency_rates", {}),
+        }
+        history_data = {
+            "temp_history": data.get("temp_history", []),
+            "currency_history": data.get("currency_history", []),
+        }
+        for filename, payload in (
+            ("weather_current.json", current_data),
+            ("weather_history.json", history_data),
+        ):
+            target = os.path.join(os.path.dirname(DATA_FILE), filename)
+            with open(target, "w", encoding="utf-8") as output:
+                json.dump(payload, output, ensure_ascii=False, separators=(",", ":"))
         log.info(f"💾 Данные сохранены: {temp_count} записей температуры, {curr_count} записей курсов")
     except Exception as e:
         log.error(f"Ошибка сохранения: {e}")
