@@ -1,11 +1,11 @@
 {
   "weather": {
-    "cur_temp": 10.15,
+    "cur_temp": 12.97,
     "cur_icon": "01d",
     "cur_descr": "ясно",
-    "cur_humidity": 74,
+    "cur_humidity": 62,
     "cur_pressure": 1030,
-    "last_upd": "31.10.2026 11:53:14",
+    "last_upd": "31.10.2026 13:22:13",
     "day_name_1": "Вс.",
     "temp_1": "+9",
     "icon_1": "04d",
@@ -32,7 +32,7 @@
     "Аср": "14:52",
     "Магриб": "17:16",
     "Иша": "18:57",
-    "last_upd": "31.10.2026 11:53:15"
+    "last_upd": "31.10.2026 13:22:14"
   },
   "currency_rates": {
     "EUR": {
@@ -43,95 +43,81 @@
       "buy": 452.0,
       "sale": 455.0
     },
-    "last_upd": "31.10.2026 11:53:20"
+    "last_upd": "31.10.2026 13:22:17"
   },
   "temp_history": [
-    {
-      "temp": 12.17,
-      "icon": "01n",
-      "descr": "ясно",
-      "timestamp": "28.10.2026 17:29:58",
-      "index": 1
-    },
     {
       "temp": 6.01,
       "icon": "01n",
       "descr": "ясно",
       "timestamp": "29.10.2026 00:01:05",
-      "index": 2
+      "index": 1
     },
     {
       "temp": 6.55,
       "icon": "50d",
       "descr": "плотный туман",
       "timestamp": "29.10.2026 09:14:10",
-      "index": 3
+      "index": 2
     },
     {
       "temp": 11.39,
       "icon": "01n",
       "descr": "ясно",
       "timestamp": "29.10.2026 17:45:57",
-      "index": 4
+      "index": 3
     },
     {
       "temp": 6.54,
       "icon": "01n",
       "descr": "ясно",
       "timestamp": "30.10.2026 00:09:07",
-      "index": 5
+      "index": 4
     },
     {
       "temp": 7.01,
       "icon": "01d",
       "descr": "ясно",
       "timestamp": "30.10.2026 09:21:02",
-      "index": 6
+      "index": 5
     },
     {
       "temp": 11.62,
       "icon": "01n",
       "descr": "ясно",
       "timestamp": "30.10.2026 17:35:33",
-      "index": 7
+      "index": 6
     },
     {
       "temp": 6.77,
       "icon": "01n",
       "descr": "ясно",
       "timestamp": "30.10.2026 23:51:48",
-      "index": 8
+      "index": 7
     },
     {
       "temp": 6.5,
       "icon": "01d",
       "descr": "ясно",
       "timestamp": "31.10.2026 09:11:28",
-      "index": 9
+      "index": 8
     },
     {
       "temp": 10.15,
       "icon": "01d",
       "descr": "ясно",
       "timestamp": "31.10.2026 11:53:14",
+      "index": 9
+    },
+    {
+      "temp": 12.97,
+      "icon": "01d",
+      "descr": "ясно",
+      "timestamp": "31.10.2026 13:22:13",
       "index": 10
     }
   ],
   "currency_history": [
-    {
-      "timestamp": "28.10.2026 17:30:02",
-      "rates": {
-        "USD": {
-          "buy": 453.5,
-          "sale": 457.0
-        },
-        "EUR": {
-          "buy": 503.47,
-          "sale": 509.47
-        }
-      },
-      "index": 1
-    },
     {
       "timestamp": "29.10.2026 00:01:08",
       "rates": {
@@ -144,7 +130,7 @@
           "sale": 509.47
         }
       },
-      "index": 2
+      "index": 1
     },
     {
       "timestamp": "29.10.2026 09:14:15",
@@ -158,7 +144,7 @@
           "sale": 508.21
         }
       },
-      "index": 3
+      "index": 2
     },
     {
       "timestamp": "29.10.2026 17:46:02",
@@ -172,7 +158,7 @@
           "sale": 507.6
         }
       },
-      "index": 4
+      "index": 3
     },
     {
       "timestamp": "30.10.2026 00:09:14",
@@ -186,7 +172,7 @@
           "sale": 507.6
         }
       },
-      "index": 5
+      "index": 4
     },
     {
       "timestamp": "30.10.2026 09:21:07",
@@ -200,7 +186,7 @@
           "sale": 510.03
         }
       },
-      "index": 6
+      "index": 5
     },
     {
       "timestamp": "30.10.2026 17:35:37",
@@ -214,7 +200,7 @@
           "sale": 509.97
         }
       },
-      "index": 7
+      "index": 6
     },
     {
       "timestamp": "30.10.2026 23:51:52",
@@ -228,7 +214,7 @@
           "sale": 509.97
         }
       },
-      "index": 8
+      "index": 7
     },
     {
       "timestamp": "31.10.2026 09:11:33",
@@ -242,10 +228,24 @@
           "sale": 509.47
         }
       },
-      "index": 9
+      "index": 8
     },
     {
       "timestamp": "31.10.2026 11:53:20",
+      "rates": {
+        "USD": {
+          "buy": 452.0,
+          "sale": 455.0
+        },
+        "EUR": {
+          "buy": 504.47,
+          "sale": 509.47
+        }
+      },
+      "index": 9
+    },
+    {
+      "timestamp": "31.10.2026 13:22:17",
       "rates": {
         "USD": {
           "buy": 452.0,
