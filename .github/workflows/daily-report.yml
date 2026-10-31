@@ -8,6 +8,10 @@ on:
   schedule:
     - cron: '0 2,10,13,16,19 * * *'   # запуск по расписанию
     
+concurrency:
+  group: daily-report-main
+  cancel-in-progress: false
+
 permissions:
   contents: write   # ⬅️ даём право на пуш в репозиторий
   
@@ -69,20 +73,34 @@ jobs:
           python main.py --mode FULL_REPORT --use-live
 
       # 6️⃣ Проверка результата
-      - name: Show JSON content
-        run: cat data/weather_data.json
+      - name: Validate three JSON files
+        run: |
+          python - <<'PYVALIDATE'
+          import json
+          from pathlib import Path
+          full = json.loads(Path('data/weather_data.json').read_text(encoding='utf-8'))
+          current = json.loads(Path('data/weather_current.json').read_text(encoding='utf-8'))
+          history = json.loads(Path('data/weather_history.json').read_text(encoding='utf-8'))
+          assert all(k in current for k in ('weather','namaz','currency_rates'))
+          assert all(k in history for k in ('temp_history','currency_history'))
+          assert all(full.get(k) == v for k, v in {**current, **history}.items())
+          print('OK: all three JSON files are consistent')
+          PYVALIDATE
 
       # 7️⃣ ✅ ВАЖНО: Коммитим и пушим изменения обратно в репозиторий
       - name: Commit and push changes
         run: |
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
-          git add data/weather_data.json
+          git add -- data/weather_data.json data/weather_current.json data/weather_history.json
           if git diff --cached --quiet; then
             echo "📝 Нет изменений для коммита"
           else
             git commit -m "🔄 Auto-update weather data [skip ci]"
-            git push
+            # A concurrent/manual commit may have advanced main since checkout.
+            # Rebase the generated-data commit onto the latest remote main.
+            git pull --rebase origin main
+            git push origin HEAD:main
             echo "✅ Изменения отправлены в репозиторий"
           fi
 
