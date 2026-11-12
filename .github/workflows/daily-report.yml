@@ -1,68 +1,63 @@
 name: Daily Report Json
 
 on:
-  workflow_dispatch:   # ✅ ручной запуск
+  workflow_dispatch:
   push:
     branches:
       - main
   schedule:
-    - cron: '0 2,10,13,16,19 * * *'   # запуск по расписанию
-    
+    # GitHub Actions cron uses UTC. Original schedule preserved.
+    - cron: '0 2,10,13,16,19 * * *'
+
 concurrency:
   group: daily-report-main
   cancel-in-progress: false
 
 permissions:
-  contents: write   # ⬅️ даём право на пуш в репозиторий
-  
+  contents: write
+
 jobs:
   generate-report:
     runs-on: ubuntu-latest
     timeout-minutes: 10
 
     steps:
-      # 1️⃣ Клонирование кода
+      # 1. Checkout the repository, including history for data commits.
       - name: Checkout code
         uses: actions/checkout@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          fetch-depth: 0  # Полная история для коммита
+          fetch-depth: 0
 
-      # 2️⃣ Настройка Python
+      # 2. Python environment. 3.11 matches the local uv environment.
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
-          python-version: '3.10'
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: requirements.txt
 
-      # ✅ Кэш pip-зависимостей
-      - name: Cache pip
-        uses: actions/cache@v3
-        with:
-          path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
-          restore-keys: |
-            ${{ runner.os }}-pip-
-
-      # 3️⃣ Установка зависимостей
+      # 3. Install ALL dependencies, including python-dotenv.
       - name: Install dependencies
         run: |
-            python -m pip install --upgrade pip
-            pip install \
-              requests==2.31.0 \
-              pillow==10.0.0 \
-              "python-telegram-bot==13.7" \
-              prettytable==3.8.0 \
-              python-dateutil==2.8.2
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+          python -c "from dotenv import load_dotenv; import requests, prettytable, telegram; print('Dependencies OK')"
 
-      # 4️⃣ Создание папки data, если её нет
+      # 4. Create data directory if needed, preserving the original JSON.
       - name: Create data directory
         run: |
           mkdir -p data
           if [ ! -f data/weather_data.json ]; then
-            echo "{}" > data/weather_data.json
+            echo '{}' > data/weather_data.json
           fi
 
-      # 5️⃣ Запуск основного скрипта
+      # 5. Validate syntax before running the live report.
+      - name: Validate Python syntax
+        run: |
+          python -m compileall -q main.py settings.py logger.py weather.py namaz.py currency.py history.py storage.py alerts.py
+
+      # 6. Generate report using GitHub Secrets (no .env file on runner).
       - name: Run full report
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
@@ -72,41 +67,42 @@ jobs:
         run: |
           python main.py --mode FULL_REPORT --use-live
 
-      # 6️⃣ Проверка результата
+      # 7. Verify all three JSON files and their shared content.
       - name: Validate three JSON files
         run: |
           python - <<'PYVALIDATE'
           import json
           from pathlib import Path
+
           full = json.loads(Path('data/weather_data.json').read_text(encoding='utf-8'))
           current = json.loads(Path('data/weather_current.json').read_text(encoding='utf-8'))
           history = json.loads(Path('data/weather_history.json').read_text(encoding='utf-8'))
-          assert all(k in current for k in ('weather','namaz','currency_rates'))
-          assert all(k in history for k in ('temp_history','currency_history'))
+          assert isinstance(full, dict) and isinstance(current, dict) and isinstance(history, dict)
+          assert all(k in current for k in ('weather', 'namaz', 'currency_rates'))
+          assert all(k in history for k in ('temp_history', 'currency_history'))
           assert all(full.get(k) == v for k, v in {**current, **history}.items())
           print('OK: all three JSON files are consistent')
           PYVALIDATE
 
-      # 7️⃣ ✅ ВАЖНО: Коммитим и пушим изменения обратно в репозиторий
+      # 8. Commit ONLY the generated JSON files to main.
       - name: Commit and push changes
         run: |
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
           git add -- data/weather_data.json
-          # These two generated files are ignored by .gitignore; explicitly stage them.
+          # These two files may be ignored by .gitignore.
           git add -f -- data/weather_current.json data/weather_history.json
           if git diff --cached --quiet; then
-            echo "📝 Нет изменений для коммита"
+            echo "No JSON changes to commit"
           else
-            git commit -m "🔄 Auto-update weather data [skip ci]"
-            # A concurrent/manual commit may have advanced main since checkout.
-            # Rebase the generated-data commit onto the latest remote main.
+            git commit -m "Auto-update weather data [skip ci]"
+            # Rebase onto the current main; never force-push.
             git pull --rebase origin main
             git push origin HEAD:main
-            echo "✅ Изменения отправлены в репозиторий"
+            echo "JSON changes pushed to main"
           fi
 
-      # 8️⃣ Публикация в GitHub Pages
+      # 9. Publish the JSON data to the existing gh-pages branch.
       - name: Publish JSON to GitHub Pages
         uses: peaceiris/actions-gh-pages@v4
         with:
@@ -117,12 +113,13 @@ jobs:
           user_name: github-actions[bot]
           user_email: github-actions[bot]@users.noreply.github.com
 
-      # 9️⃣ Артефакты при ошибке
+      # 10. Preserve logs and full JSON for troubleshooting.
       - name: Upload logs on failure
         if: failure()
         uses: actions/upload-artifact@v4
         with:
           name: error-logs
+          if-no-files-found: warn
           path: |
             Log.log
             data/weather_data.json
