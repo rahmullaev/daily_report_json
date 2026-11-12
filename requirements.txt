@@ -1,0 +1,5 @@
+requests
+prettytable
+python-telegram-bot==13.15
+tzdata; platform_system == "Windows"
+python-dotenv>=1,<2

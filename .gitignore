@@ -5,4 +5,97 @@ __pycache__/
 *.bat
 *.bkp
 data/*.json
+Log.log# Секреты (не добавлять в Git)
+.env.*
+!.env.example
+*.pem
+*.key
+secrets.json
+config.local.json
+# Локальное окружение / кэш
+.venv/
+*.py[cod]
+.pytest_cache/
+.uv-cache/
+# Локальные логи
 Log.log
+*.log
+main_local_backup.py
+# Локальные настройки и секреты
+.env
+.env.*
+!.gitignore
+
+# BAT-файлы
+*.bat
+*.cmd
+
+# Резервные копии
+*_backup.py
+*.bak
+*.backup
+
+# Локальная документация
+INSTALL_RU.md
+.gitignore.additions
+
+# Локальные тесты
+tests/
+
+# Python
+.venv/
+venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+
+# Логи
+*.log
+
+# Локальные файлы IDE
+.idea/
+.vscode/
+# BEGIN LOCAL-ONLY DAILY REPORT
+.env
+.env.*
+*.bat
+*.cmd
+*.pem
+*.key
+*.p12
+*.pfx
+*.log
+*_backup.py
+*.bak
+*.backup
+.venv/
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+tests/
+INSTALL_RU.md
+.gitignore.additions
+# END LOCAL-ONLY DAILY REPORT
+
+# BEGIN DAILY REPORT LOCAL ONLY
+.env
+.env.*
+*.bat
+*.cmd
+*.pem
+*.key
+*.p12
+*.pfx
+*.log
+*_backup.py
+*.bak
+*.backup
+.venv/
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+tests/
+INSTALL_RU.md
+.gitignore.additions
+# END DAILY REPORT LOCAL ONLY
